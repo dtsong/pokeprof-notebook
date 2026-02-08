@@ -1,0 +1,17 @@
+# PokéProf Notebook — Pokémon TCG Domain Configuration
+# TODO: Populate when Pokémon TCG source documents are provided
+
+domain_name: pokemon_tcg
+
+documents: []
+  # Example (uncomment and fill when docs are available):
+  # - name: rules_and_regulations
+  #   description: "Pokémon TCG Rules & Regulations"
+  #   source_path: data/sources/rules_and_regulations.md
+  #   index_path: data/indexes/rules_and_regulations.json
+
+personas: {}
+  # TODO: Define personas (judge, organizer, player) when docs are available
+
+routing_hints: {}
+  # TODO: Define routing keywords when document structure is known
