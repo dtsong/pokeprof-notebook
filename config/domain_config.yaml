@@ -1,17 +1,159 @@
 # PokéProf Notebook — Pokémon TCG Domain Configuration
-# TODO: Populate when Pokémon TCG source documents are provided
 
 domain_name: pokemon_tcg
 
-documents: []
-  # Example (uncomment and fill when docs are available):
-  # - name: rules_and_regulations
-  #   description: "Pokémon TCG Rules & Regulations"
-  #   source_path: data/sources/rules_and_regulations.md
-  #   index_path: data/indexes/rules_and_regulations.json
+documents:
+  - name: rulebook
+    description: "Pokémon TCG Rules & Regulations (Play! Pokémon)"
+    source_path: data/intermediate/rulebook.md
+    index_path: data/indexes/rulebook.json
+    section_pattern: '^\d+(\.\d+)*'
 
-personas: {}
-  # TODO: Define personas (judge, organizer, player) when docs are available
+  - name: penalty_guidelines
+    description: "Play! Pokémon Penalty Guidelines"
+    source_path: data/intermediate/penalty_guidelines.md
+    index_path: data/indexes/penalty_guidelines.json
+    section_pattern: '^\d+(\.\d+)*'
 
-routing_hints: {}
-  # TODO: Define routing keywords when document structure is known
+  - name: legal_card_list
+    description: "Current Standard Legal Card List"
+    source_path: data/intermediate/legal_card_list.md
+    index_path: data/indexes/legal_card_list.json
+    section_pattern: ''
+
+  - name: card_db_pokemon
+    description: "Pokemon cards with abilities, attacks, types, HP"
+    source_path: data/intermediate/card_db_pokemon.md
+    index_path: data/indexes/card_db_pokemon.json
+    section_pattern: ''
+
+  - name: card_db_trainers
+    description: "Trainer cards (Supporters, Items, Stadiums, Tools)"
+    source_path: data/intermediate/card_db_trainers.md
+    index_path: data/indexes/card_db_trainers.json
+    section_pattern: ''
+
+  - name: card_db_energy
+    description: "Energy cards (Basic and Special)"
+    source_path: data/intermediate/card_db_energy.md
+    index_path: data/indexes/card_db_energy.json
+    section_pattern: ''
+
+  - name: rulings_compendium
+    description: "PokeGym Rulings Compendium - official Q&A rulings on card interactions"
+    source_path: data/intermediate/rulings_compendium.md
+    index_path: data/indexes/rulings_compendium.json
+    section_pattern: ''
+
+personas:
+  judge:
+    system_prompt: config/prompts/judge_system.txt
+    description: "Precise, authoritative rule citations for tournament judges"
+  professor:
+    system_prompt: config/prompts/professor_system.txt
+    description: "Educational explanations for aspiring Pokémon Professors"
+  player:
+    system_prompt: config/prompts/player_system.txt
+    description: "Conversational, plain-language rule explanations for players"
+
+routing_hints:
+  rulebook:
+    - "rule"
+    - "attack"
+    - "energy"
+    - "evolve"
+    - "evolution"
+    - "retreat"
+    - "ability"
+    - "trainer"
+    - "supporter"
+    - "stadium"
+    - "prize"
+    - "knock out"
+    - "weakness"
+    - "resistance"
+    - "turn"
+    - "setup"
+    - "coin"
+    - "confused"
+    - "poisoned"
+    - "burned"
+    - "asleep"
+    - "paralyzed"
+    - "bench"
+    - "active"
+    - "hand"
+    - "deck"
+    - "discard"
+    - "damage"
+    - "hp"
+    - "item"
+    - "tool"
+    - "gx"
+    - "ex"
+    - "vstar"
+    - "vmax"
+    - "how does"
+    - "can i"
+    - "what happens"
+  penalty_guidelines:
+    - "penalty"
+    - "infraction"
+    - "warning"
+    - "game loss"
+    - "disqualif"
+    - "marked card"
+    - "slow play"
+    - "deck error"
+    - "drawing extra"
+    - "unsporting"
+    - "prize"
+    - "caution"
+    - "judge"
+    - "tier"
+  legal_card_list:
+    - "legal"
+    - "banned"
+    - "standard"
+    - "expanded"
+    - "format"
+    - "rotation"
+    - "set"
+    - "allowed"
+    - "playable"
+  card_db_pokemon:
+    - "card"
+    - "pokemon"
+    - "ability"
+    - "attack"
+    - "hp"
+    - "weakness"
+    - "resistance"
+    - "stage"
+    - "ex"
+    - "vstar"
+    - "vmax"
+    - "gx"
+  card_db_trainers:
+    - "supporter"
+    - "item"
+    - "stadium"
+    - "tool"
+    - "trainer"
+  card_db_energy:
+    - "energy"
+    - "special energy"
+    - "basic energy"
+  rulings_compendium:
+    - "ruling"
+    - "compendium"
+    - "interaction"
+    - "how does"
+    - "does it"
+    - "can you"
+    - "work with"
+    - "play off"
+    - "affect"
+    - "prevent"
+    - "block"
+    - "stack"
