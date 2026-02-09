@@ -102,7 +102,7 @@ pokeprof serve --reload            # auto-reload for development
 
 | Document | Source | Nodes | Tokens |
 |----------|--------|------:|-------:|
-| Rulebook | Play! Pokemon Rules PDF | 36 | 12,564 |
+| Rulebook | Play! Pokemon Rules PDF | 69 | 12,194 |
 | Penalty Guidelines | Play! Pokemon Penalty Guidelines PDF | 64 | 15,972 |
 | Legal Card List | PokeGym Standard Legal Card List HTML | 9 | 5,761 |
 | Card DB (Pokemon) | TCGDex API — 3,633 SV-era cards | 1,192 | 94,481 |
