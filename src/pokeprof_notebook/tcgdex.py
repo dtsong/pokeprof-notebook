@@ -26,28 +26,40 @@ _MAX_FAILURE_RATE = 0.2  # Abort if >20% of cards in a set fail
 
 
 def fetch_standard_sets(client: httpx.Client) -> list[dict[str, Any]]:
-    """Fetch all sets and filter to standard-legal ones."""
+    """Fetch all sets and filter to standard-legal ones.
+
+    TCGDex returns ``standard: False`` for all sets even when individual
+    cards are standard-legal.  As a practical workaround we select sets
+    whose ID starts with ``"sv"`` (the Scarlet & Violet series), which
+    covers all current standard-legal sets.
+    """
     resp = client.get(f"{_BASE_URL}/en/sets")
     resp.raise_for_status()
     all_sets = resp.json()
 
+    # Filter to Scarlet & Violet series (current standard-legal sets)
+    sv_sets = [s for s in all_sets if s.get("id", "").startswith("sv")]
+    logger.info(
+        "Found %d Scarlet & Violet sets out of %d total",
+        len(sv_sets),
+        len(all_sets),
+    )
+
     standard_sets = []
-    for s in all_sets:
-        # Fetch full set details to check legal status
+    for s in sv_sets:
+        # Fetch full set details to get the cards list
         set_resp = client.get(f"{_BASE_URL}/en/sets/{s['id']}")
         set_resp.raise_for_status()
         set_data = set_resp.json()
         time.sleep(_RATE_LIMIT_SLEEP)
 
-        legal = set_data.get("legal", {})
-        if legal.get("standard"):
-            standard_sets.append(set_data)
-            logger.info(
-                "Standard set: %s (%s) — %d cards",
-                set_data["name"],
-                set_data["id"],
-                len(set_data.get("cards", [])),
-            )
+        standard_sets.append(set_data)
+        logger.info(
+            "Standard set: %s (%s) — %d cards",
+            set_data["name"],
+            set_data["id"],
+            len(set_data.get("cards", [])),
+        )
 
     logger.info("Found %d standard-legal sets", len(standard_sets))
     return standard_sets
@@ -61,7 +73,8 @@ def fetch_cards_for_set(
     card_summaries = set_data.get("cards", [])
 
     failed = 0
-    for card_summary in card_summaries:
+    total = len(card_summaries)
+    for i, card_summary in enumerate(card_summaries, 1):
         card_id = card_summary["id"]
         try:
             resp = client.get(f"{_BASE_URL}/en/cards/{card_id}")
@@ -72,8 +85,15 @@ def fetch_cards_for_set(
             logger.warning("Failed to fetch card %s: %s", card_id, e)
         time.sleep(_RATE_LIMIT_SLEEP)
 
+        if i % 50 == 0 or i == total:
+            logger.info(
+                "  [%s] %d/%d cards fetched...",
+                set_data.get("name", "unknown"),
+                i,
+                total,
+            )
+
     if failed:
-        total = len(card_summaries)
         failure_rate = failed / total if total else 0
         logger.warning(
             "Failed to fetch %d/%d cards from set %s (%.0f%%)",

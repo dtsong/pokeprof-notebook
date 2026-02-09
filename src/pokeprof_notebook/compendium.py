@@ -1,113 +1,191 @@
-"""Synchronous client for the Pokémon Rulings Compendium WordPress REST API.
+"""Client for the Pokemon Rulings Compendium at compendium.pokegym.net.
 
-Fetches rulings from compendium.pokegym.net and caches the result
+Scrapes the all-rulings-by-category HTML page and caches the result
 to data/sources/compendium_rulings.json.
 """
 
 from __future__ import annotations
 
-import html
 import json
 import logging
 import os
 import re
 import tempfile
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import httpx
+from bs4 import BeautifulSoup, Tag
 
 logger = logging.getLogger(__name__)
 
-_BASE_URL = "https://compendium.pokegym.net/wp-json/wp/v2"
-_RATE_LIMIT_SLEEP = 0.2  # 200ms between requests
+_ALL_RULINGS_URL = "https://compendium.pokegym.net/all-rulings-by-category/"
+_USER_AGENT = "Mozilla/5.0 (compatible; PokeProfNotebook/1.0)"
 _CACHE_MAX_AGE_DAYS = 7
-_PER_PAGE = 100
+
+# The 8 known top-level categories in display order
+_CATEGORY_NAMES = [
+    "Errata",
+    "Meta-Rulings",
+    "Attacks",
+    "Abilities",
+    "Trainers",
+    "Energy",
+    "Gameplay",
+    "Team Battle",
+]
 
 
-def _strip_html(raw_html: str) -> str:
-    """Strip HTML tags and decode entities to plain text."""
-    text = re.sub(r"<br\s*/?>", "\n", raw_html, flags=re.IGNORECASE)
-    text = re.sub(r"</?p\s*>", "\n", text, flags=re.IGNORECASE)
-    text = re.sub(r"<[^>]+>", "", text)
-    text = html.unescape(text)
-    # Collapse whitespace
-    text = re.sub(r"\n{3,}", "\n\n", text)
-    return text.strip()
+def _parse_rulings_page(html_content: str) -> dict[str, Any]:
+    """Parse the all-rulings-by-category HTML page into structured data.
 
+    Walks the HTML linearly, tracking the current h3 (category) and h4
+    (topic/card name). Ruling divs under each h4 are grouped into a
+    single post with their text concatenated.
 
-def fetch_categories(client: httpx.Client) -> list[dict[str, Any]]:
-    """Fetch all categories from the WordPress REST API."""
-    categories: list[dict[str, Any]] = []
-    page = 1
+    Returns:
+        Dict matching the expected JSON schema with fetched_at,
+        total_posts, categories, and posts.
+    """
+    soup = BeautifulSoup(html_content, "lxml")
 
-    while True:
-        resp = client.get(
-            f"{_BASE_URL}/categories",
-            params={"per_page": _PER_PAGE, "page": page},
-        )
-        resp.raise_for_status()
-        batch = resp.json()
-        if not batch:
-            break
-        categories.extend(batch)
+    # Find the main content area
+    main = soup.find("main", class_="site-content")
+    if main is None:
+        # Fallback: try article or the whole body
+        main = soup.find("article") or soup.find("main") or soup.body
+    if main is None:
+        raise ValueError("Could not find main content area in HTML page")
 
-        try:
-            total_pages = int(resp.headers.get("X-WP-TotalPages", "1"))
-        except ValueError:
-            total_pages = 1
-        if page >= total_pages:
-            break
-        page += 1
-        time.sleep(_RATE_LIMIT_SLEEP)
+    # Build category lookup: name -> id (synthetic, 1-indexed)
+    category_id_map: dict[str, int] = {}
+    categories_list: list[dict[str, Any]] = []
+    for idx, name in enumerate(_CATEGORY_NAMES, start=1):
+        category_id_map[name] = idx
+        categories_list.append({
+            "id": idx,
+            "name": name,
+            "parent": 0,
+            "count": 0,
+        })
+    next_category_id = len(_CATEGORY_NAMES) + 1
 
-    logger.info("Fetched %d categories", len(categories))
-    return categories
+    # Walk through direct children of main, tracking current h3/h4
+    current_category: str | None = None
+    current_category_id: int = 0
+    current_topic: str | None = None
 
+    # Accumulator: (category_name, category_id, topic_name) -> list of ruling texts
+    topic_rulings: dict[tuple[str, int, str], list[str]] = {}
+    # Track latest date per topic
+    topic_dates: dict[tuple[str, int, str], str] = {}
 
-def fetch_posts_for_category(
-    client: httpx.Client, category_id: int, category_name: str
-) -> list[dict[str, Any]]:
-    """Fetch all posts for a category, handling pagination."""
+    # We need to iterate all descendants in document order, not just
+    # direct children, because the structure may be nested.
+    # Use recursive iteration over elements.
+    for element in main.descendants:
+        if not isinstance(element, Tag):
+            continue
+
+        if element.name == "h3":
+            heading_text = element.get_text(strip=True)
+            if heading_text:
+                current_category = heading_text
+                if current_category not in category_id_map:
+                    category_id_map[current_category] = next_category_id
+                    categories_list.append({
+                        "id": next_category_id,
+                        "name": current_category,
+                        "parent": 0,
+                        "count": 0,
+                    })
+                    next_category_id += 1
+                current_category_id = category_id_map[current_category]
+                current_topic = None
+
+        elif element.name == "h4":
+            heading_text = element.get_text(strip=True)
+            if heading_text and current_category is not None:
+                current_topic = heading_text
+
+        elif (
+            element.name == "div"
+            and element.get("class")
+            and any(
+                cls.startswith("ruling-")
+                for cls in element.get("class", [])
+            )
+        ):
+            if current_category is None or current_topic is None:
+                continue
+
+            key = (current_category, current_category_id, current_topic)
+
+            # Extract ruling text from <dl class="single-entry"><dd>...</dd></dl>
+            ruling_parts: list[str] = []
+            for dd in element.find_all("dd"):
+                text = dd.get_text(strip=True)
+                if text:
+                    ruling_parts.append(text)
+
+            # Extract source line
+            source_div = element.find("div", id="source")
+            if source_div is None:
+                # Try finding by content pattern
+                source_div = element.find(
+                    "div", string=re.compile(r"Source", re.IGNORECASE)
+                )
+            source_text = ""
+            if source_div:
+                source_text = source_div.get_text(strip=True)
+                ruling_parts.append(source_text)
+
+            if ruling_parts:
+                ruling_block = "\n".join(ruling_parts)
+                topic_rulings.setdefault(key, []).append(ruling_block)
+
+            # Extract date from source line (YYYY-MM-DD pattern)
+            if source_text:
+                date_match = re.search(r"\d{4}-\d{2}-\d{2}", source_text)
+                if date_match:
+                    topic_dates[key] = date_match.group(0)
+
+    # Build posts from accumulated topic rulings
     posts: list[dict[str, Any]] = []
-    page = 1
+    post_id = 1
+    category_counts: dict[int, int] = {}
 
-    while True:
-        resp = client.get(
-            f"{_BASE_URL}/posts",
-            params={
-                "categories": category_id,
-                "per_page": _PER_PAGE,
-                "page": page,
-            },
-        )
-        resp.raise_for_status()
-        batch = resp.json()
-        if not batch:
-            break
+    for (cat_name, cat_id, topic_name), rulings in topic_rulings.items():
+        content = "\n\n".join(rulings)
 
-        for post in batch:
-            posts.append({
-                "id": post["id"],
-                "title": post.get("title", {}).get("rendered", ""),
-                "content": post.get("content", {}).get("rendered", ""),
-                "date": post.get("date", ""),
-                "category_id": category_id,
-                "category_name": category_name,
-            })
+        # Use the latest date found, or empty string
+        date = topic_dates.get((cat_name, cat_id, topic_name), "")
 
-        try:
-            total_pages = int(resp.headers.get("X-WP-TotalPages", "1"))
-        except ValueError:
-            total_pages = 1
-        if page >= total_pages:
-            break
-        page += 1
-        time.sleep(_RATE_LIMIT_SLEEP)
+        posts.append({
+            "id": post_id,
+            "title": topic_name,
+            "content": content,
+            "date": date,
+            "category_id": cat_id,
+            "category_name": cat_name,
+        })
+        post_id += 1
+        category_counts[cat_id] = category_counts.get(cat_id, 0) + 1
 
-    return posts
+    # Update category counts
+    for cat in categories_list:
+        cat["count"] = category_counts.get(cat["id"], 0)
+
+    # Remove categories with zero posts
+    categories_list = [c for c in categories_list if c["count"] > 0]
+
+    return {
+        "fetched_at": datetime.now(timezone.utc).isoformat(),
+        "total_posts": len(posts),
+        "categories": categories_list,
+        "posts": posts,
+    }
 
 
 def fetch_all_rulings(
@@ -115,6 +193,9 @@ def fetch_all_rulings(
     force: bool = False,
 ) -> Path:
     """Fetch all Compendium rulings and write to JSON cache.
+
+    Scrapes the all-rulings-by-category page at compendium.pokegym.net
+    and parses the HTML into structured ruling data.
 
     Skips if the cache is less than CACHE_MAX_AGE_DAYS old unless force=True.
 
@@ -142,48 +223,29 @@ def fetch_all_rulings(
         except (json.JSONDecodeError, KeyError, ValueError) as e:
             logger.warning("Compendium cache appears corrupt, re-fetching: %s", e)
 
+    logger.info("Fetching all rulings from %s", _ALL_RULINGS_URL)
+
     with httpx.Client(
-        timeout=30.0,
-        headers={"Accept": "application/json"},
+        timeout=60.0,
+        headers={"User-Agent": _USER_AGENT},
         follow_redirects=True,
     ) as client:
-        categories = fetch_categories(client)
+        resp = client.get(_ALL_RULINGS_URL)
+        resp.raise_for_status()
+        html_content = resp.text
 
-        # Build category hierarchy
-        category_map: dict[int, dict[str, Any]] = {}
-        for cat in categories:
-            category_map[cat["id"]] = {
-                "id": cat["id"],
-                "name": _strip_html(cat.get("name", "")),
-                "parent": cat.get("parent", 0),
-                "count": cat.get("count", 0),
-            }
+    logger.info(
+        "Downloaded %d bytes of HTML, parsing rulings...",
+        len(html_content),
+    )
 
-        all_posts: list[dict[str, Any]] = []
-        for cat in categories:
-            cat_id = cat["id"]
-            cat_name = _strip_html(cat.get("name", ""))
-            post_count = cat.get("count", 0)
-            if post_count == 0:
-                continue
+    result = _parse_rulings_page(html_content)
 
-            logger.info("Fetching %d posts from category: %s", post_count, cat_name)
-            posts = fetch_posts_for_category(client, cat_id, cat_name)
-            all_posts.extend(posts)
-            logger.info("  Fetched %d posts (total: %d)", len(posts), len(all_posts))
-            time.sleep(_RATE_LIMIT_SLEEP)
-
-    # Strip HTML from post content
-    for post in all_posts:
-        post["content"] = _strip_html(post["content"])
-        post["title"] = _strip_html(post["title"])
-
-    result = {
-        "fetched_at": datetime.now(timezone.utc).isoformat(),
-        "total_posts": len(all_posts),
-        "categories": list(category_map.values()),
-        "posts": all_posts,
-    }
+    logger.info(
+        "Parsed %d posts across %d categories",
+        result["total_posts"],
+        len(result["categories"]),
+    )
 
     # Atomic write to prevent corruption on interrupted fetch
     fd, tmp_path = tempfile.mkstemp(dir=str(output_path.parent), suffix=".tmp")
@@ -195,5 +257,6 @@ def fetch_all_rulings(
     except BaseException:
         Path(tmp_path).unlink(missing_ok=True)
         raise
-    logger.info("Wrote %d rulings to %s", len(all_posts), output_path)
+
+    logger.info("Wrote %d rulings to %s", result["total_posts"], output_path)
     return output_path
