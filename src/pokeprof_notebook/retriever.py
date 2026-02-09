@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import re
+from dataclasses import replace
 
 from anthropic import Anthropic, APIConnectionError, APIStatusError, AuthenticationError
 
@@ -73,7 +74,8 @@ def _ancestry_context(node: TreeNode, lookup: dict[str, TreeNode]) -> str:
 
 
 def _select_children(
-    node: TreeNode, query: str, model: str = "claude-haiku-4-5-20251001"
+    node: TreeNode, query: str, model: str = "claude-haiku-4-5-20251001",
+    *, client: Anthropic,
 ) -> list[TreeNode]:
     """Use LLM to select which children are relevant to the query."""
     if not node.children:
@@ -89,7 +91,6 @@ def _select_children(
     options_text = "\n".join(options)
 
     try:
-        client = Anthropic()
         message = client.messages.create(
             model=model,
             system=(
@@ -116,12 +117,6 @@ def _select_children(
         logger.warning(
             "LLM tree navigation failed (%s), falling back to keyword matching",
             e,
-        )
-        return _keyword_select_children(node, query)
-    except Exception:
-        logger.warning(
-            "LLM tree navigation failed, falling back to keyword matching",
-            exc_info=True,
         )
         return _keyword_select_children(node, query)
 
@@ -184,6 +179,7 @@ def _search_with_llm(
     model: str,
 ) -> list[RetrievedSection]:
     """LLM-guided tree descent."""
+    client = Anthropic()
     results: list[RetrievedSection] = []
     frontier: list[TreeNode] = [index.root]
     visited: set[str] = set()
@@ -195,7 +191,7 @@ def _search_with_llm(
         visited.add(node.id)
 
         if node.children:
-            selected = _select_children(node, query, model)
+            selected = _select_children(node, query, model, client=client)
             for child in selected:
                 if child.children:
                     frontier.append(child)
@@ -308,7 +304,7 @@ def search_by_card_names(
 ) -> list[RetrievedSection]:
     """Direct node lookup by card name — bypasses tree descent.
 
-    Searches all leaf nodes for titles matching the given card names.
+    Searches all nodes for titles matching the given card names.
     """
     results: list[RetrievedSection] = []
     names_lower = {n.lower() for n in card_names}
@@ -367,9 +363,9 @@ def search_multi(
             )
 
         weight = weights.get(doc_name, 1.0)
-        for rs in results:
-            rs.score *= weight
-        all_results.extend(results)
+        all_results.extend(
+            replace(rs, score=rs.score * weight) for rs in results
+        )
 
     # Detect cross-document references
     cross_refs = detect_cross_doc_references(all_results)
@@ -379,9 +375,9 @@ def search_multi(
             extra = search(
                 query, indexes[ref_doc], max_sections=3, model=model, use_llm=use_llm
             )
-            for rs in extra:
-                rs.score *= 0.7
-            all_results.extend(extra)
+            all_results.extend(
+                replace(rs, score=rs.score * 0.7) for rs in extra
+            )
 
     # Deduplicate by (document_name, node_id) to avoid cross-document collisions
     seen: set[tuple[str, str]] = set()

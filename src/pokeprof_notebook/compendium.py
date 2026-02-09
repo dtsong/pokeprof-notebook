@@ -6,6 +6,7 @@ to data/sources/compendium_rulings.json.
 
 from __future__ import annotations
 
+import html
 import json
 import logging
 import os
@@ -26,22 +27,12 @@ _CACHE_MAX_AGE_DAYS = 7
 _PER_PAGE = 100
 
 
-def _strip_html(html: str) -> str:
+def _strip_html(raw_html: str) -> str:
     """Strip HTML tags and decode entities to plain text."""
-    text = re.sub(r"<br\s*/?>", "\n", html, flags=re.IGNORECASE)
+    text = re.sub(r"<br\s*/?>", "\n", raw_html, flags=re.IGNORECASE)
     text = re.sub(r"</?p\s*>", "\n", text, flags=re.IGNORECASE)
     text = re.sub(r"<[^>]+>", "", text)
-    # Decode common HTML entities
-    text = text.replace("&amp;", "&")
-    text = text.replace("&lt;", "<")
-    text = text.replace("&gt;", ">")
-    text = text.replace("&quot;", '"')
-    text = text.replace("&#8217;", "'")
-    text = text.replace("&#8220;", '"')
-    text = text.replace("&#8221;", '"')
-    text = text.replace("&#8211;", "-")
-    text = text.replace("&#8212;", "--")
-    text = text.replace("&nbsp;", " ")
+    text = html.unescape(text)
     # Collapse whitespace
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()

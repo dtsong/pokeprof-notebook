@@ -93,6 +93,11 @@ def _detect_card_names(query: str) -> list[tuple[str, str]]:
         if start == -1:
             continue
         end = start + len(name)
+        # Word boundary check — reject substring matches
+        if start > 0 and q[start - 1].isalnum():
+            continue
+        if end < len(q) and q[end].isalnum():
+            continue
         # Check no overlap with already matched ranges
         if any(
             not (end <= mr_start or start >= mr_end)
@@ -114,7 +119,7 @@ def _has_interaction_intent(query: str) -> bool:
 def classify(query: str) -> str:
     """Classify query type based on keyword patterns.
 
-    Returns one of: rules_lookup, procedure, penalty, card_specific,
+    Returns one of: rules_lookup, penalty, card_specific,
     format_legality, card_interaction.
     """
     q = query.lower()
@@ -180,7 +185,7 @@ def _llm_classify(
         return None
 
     try:
-        from anthropic import Anthropic
+        from anthropic import Anthropic, APIConnectionError, APIStatusError, AuthenticationError
 
         client = Anthropic()
         message = client.messages.create(
@@ -214,10 +219,10 @@ def _llm_classify(
             _llm_classify_cache[cache_key] = result
             return result
         return None
-    except Exception:
-        logger.warning(
-            "LLM classification failed, falling back to keywords", exc_info=True
-        )
+    except AuthenticationError:
+        raise
+    except (APIConnectionError, APIStatusError) as e:
+        logger.warning("LLM classification failed (%s), falling back to keywords", e)
         return None
 
 

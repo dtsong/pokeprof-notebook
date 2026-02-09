@@ -12,7 +12,7 @@ from collections.abc import Generator
 from pathlib import Path
 
 import tiktoken
-from anthropic import Anthropic
+from anthropic import Anthropic, APIConnectionError, APIStatusError
 
 from pokeprof_notebook.config import get_project_root
 from pokeprof_notebook.types import DocumentType, RetrievedSection, TreeNode
@@ -28,6 +28,8 @@ _TOKEN_BUDGETS: dict[str, int] = {
 _DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 
 _CARD_DB_TYPES = {DocumentType.CARD_DATABASE}
+
+_ENCODER = tiktoken.encoding_for_model("gpt-4o-mini")
 
 
 def _load_system_prompt(persona: str) -> str:
@@ -69,7 +71,7 @@ def _build_context(sections: list[RetrievedSection], token_budget: int) -> str:
     2. General rules sections
     3. Compendium rulings
     """
-    enc = tiktoken.encoding_for_model("gpt-4o-mini")
+    enc = _ENCODER
 
     # Separate sections by type
     card_sections = [s for s in sections if _is_card_section(s)]
@@ -171,15 +173,19 @@ def synthesize(
         return "I couldn't find relevant rule sections to answer this question."
 
     client = Anthropic()
-    message = client.messages.create(
-        model=model,
-        system=system_prompt,
-        messages=[
-            {"role": "user", "content": user_message},
-        ],
-        temperature=0.1,
-        max_tokens=1024,
-    )
+    try:
+        message = client.messages.create(
+            model=model,
+            system=system_prompt,
+            messages=[
+                {"role": "user", "content": user_message},
+            ],
+            temperature=0.1,
+            max_tokens=1024,
+        )
+    except (APIConnectionError, APIStatusError) as e:
+        logger.error("Synthesis API call failed: %s", e)
+        raise
 
     if not message.content or not message.content[0].text:
         logger.warning("LLM returned empty response for query: %s", query[:100])
@@ -204,18 +210,14 @@ def synthesize_stream(
         return
 
     client = Anthropic()
-    try:
-        with client.messages.stream(
-            model=model,
-            system=system_prompt,
-            messages=[
-                {"role": "user", "content": user_message},
-            ],
-            temperature=0.1,
-            max_tokens=1024,
-        ) as stream:
-            for text in stream.text_stream:
-                yield text
-    except Exception:
-        logger.error("Streaming synthesis failed", exc_info=True)
-        raise
+    with client.messages.stream(
+        model=model,
+        system=system_prompt,
+        messages=[
+            {"role": "user", "content": user_message},
+        ],
+        temperature=0.1,
+        max_tokens=1024,
+    ) as stream:
+        for text in stream.text_stream:
+            yield text

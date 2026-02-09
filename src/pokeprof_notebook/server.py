@@ -13,7 +13,8 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Query, Request
+from anthropic import APIConnectionError, APIStatusError, AuthenticationError
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from sse_starlette.sse import EventSourceResponse
@@ -24,7 +25,6 @@ from pokeprof_notebook.overlay import annotate_sections, load_overlay
 from pokeprof_notebook.retriever import search, search_multi
 from pokeprof_notebook.router import route
 from pokeprof_notebook.synthesizer import synthesize_stream
-from pokeprof_notebook.types import DomainConfig
 
 load_dotenv()
 
@@ -65,21 +65,17 @@ async def query_endpoint(
 ):
     """Query endpoint with SSE streaming response."""
     if not os.environ.get("ANTHROPIC_API_KEY"):
-        return EventSourceResponse(
-            _error_stream("ANTHROPIC_API_KEY not set"),
-            media_type="text/event-stream",
-        )
+        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not set")
 
     if model not in _ALLOWED_MODELS:
-        return EventSourceResponse(
-            _error_stream(f"Invalid model. Allowed: {', '.join(sorted(_ALLOWED_MODELS))}"),
-            media_type="text/event-stream",
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid model. Allowed: {', '.join(sorted(_ALLOWED_MODELS))}",
         )
 
     if persona not in {"judge", "professor", "player"}:
-        return EventSourceResponse(
-            _error_stream("Invalid persona. Allowed: judge, professor, player"),
-            media_type="text/event-stream",
+        raise HTTPException(
+            status_code=422, detail="Invalid persona. Allowed: judge, professor, player"
         )
 
     try:
@@ -167,6 +163,12 @@ async def query_endpoint(
 
             yield {"event": "done", "data": ""}
 
+        except AuthenticationError as e:
+            logger.error("Authentication failed: %s", e)
+            yield {"event": "error", "data": "Authentication failed. Check API key."}
+        except (APIConnectionError, APIStatusError) as e:
+            logger.error("API error during query: %s", e)
+            yield {"event": "error", "data": "The AI service is temporarily unavailable. Please try again."}
         except Exception:
             logger.error("Query pipeline error", exc_info=True)
             yield {"event": "error", "data": "An internal error occurred."}

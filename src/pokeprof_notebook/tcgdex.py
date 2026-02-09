@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 _BASE_URL = "https://api.tcgdex.net/v2"
 _RATE_LIMIT_SLEEP = 0.1  # 100ms between individual card requests
 _CACHE_MAX_AGE_DAYS = 7
+_MAX_FAILURE_RATE = 0.2  # Abort if >20% of cards in a set fail
 
 
 def fetch_standard_sets(client: httpx.Client) -> list[dict[str, Any]]:
@@ -72,10 +73,17 @@ def fetch_cards_for_set(
         time.sleep(_RATE_LIMIT_SLEEP)
 
     if failed:
+        total = len(card_summaries)
+        failure_rate = failed / total if total else 0
         logger.warning(
-            "Failed to fetch %d/%d cards from set %s",
-            failed, len(card_summaries), set_data.get("name", "unknown"),
+            "Failed to fetch %d/%d cards from set %s (%.0f%%)",
+            failed, total, set_data.get("name", "unknown"), failure_rate * 100,
         )
+        if failure_rate > _MAX_FAILURE_RATE:
+            raise RuntimeError(
+                f"Too many failures fetching set {set_data.get('name', 'unknown')}: "
+                f"{failed}/{total} cards failed ({failure_rate:.0%})"
+            )
     return cards
 
 
