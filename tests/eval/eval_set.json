@@ -1,0 +1,236 @@
+[
+  {
+    "id": "rulebook_001",
+    "question": "How many Prize cards does each player set aside at the start of a game?",
+    "expected_answer_contains": ["six", "6"],
+    "expected_documents": ["rulebook"],
+    "persona": "judge",
+    "difficulty": "easy",
+    "category": "rulebook"
+  },
+  {
+    "id": "rulebook_002",
+    "question": "What are the three ways to win a Pokémon TCG game?",
+    "expected_answer_contains": ["prize", "knock out", "deck"],
+    "expected_documents": ["rulebook"],
+    "persona": "judge",
+    "difficulty": "easy",
+    "category": "rulebook"
+  },
+  {
+    "id": "rulebook_003",
+    "question": "How many Energy cards can a player attach per turn?",
+    "expected_answer_contains": ["one", "1"],
+    "expected_documents": ["rulebook"],
+    "persona": "judge",
+    "difficulty": "easy",
+    "category": "rulebook"
+  },
+  {
+    "id": "rulebook_004",
+    "question": "What happens when a Pokémon is Confused and tries to attack?",
+    "expected_answer_contains": ["flip", "coin"],
+    "expected_documents": ["rulebook"],
+    "persona": "professor",
+    "difficulty": "medium",
+    "category": "rulebook"
+  },
+  {
+    "id": "rulebook_005",
+    "question": "How many damage counters does Poison place between turns?",
+    "expected_answer_contains": ["1", "10"],
+    "expected_documents": ["rulebook"],
+    "persona": "judge",
+    "difficulty": "easy",
+    "category": "rulebook"
+  },
+  {
+    "id": "rulebook_006",
+    "question": "What is a mulligan in the Pokémon TCG?",
+    "expected_answer_contains": ["basic", "hand", "redraw"],
+    "expected_documents": ["rulebook"],
+    "persona": "professor",
+    "difficulty": "medium",
+    "category": "rulebook"
+  },
+  {
+    "id": "rulebook_007",
+    "question": "How many Pokémon can be on a player's Bench at one time?",
+    "expected_answer_contains": ["5", "five"],
+    "expected_documents": ["rulebook"],
+    "persona": "player",
+    "difficulty": "easy",
+    "category": "rulebook"
+  },
+  {
+    "id": "rulebook_008",
+    "question": "What is Sudden Death in the Pokémon TCG?",
+    "expected_answer_contains": ["tie", "prize", "1"],
+    "expected_documents": ["rulebook"],
+    "persona": "judge",
+    "difficulty": "medium",
+    "category": "rulebook"
+  },
+  {
+    "id": "rulebook_009",
+    "question": "How many Supporter cards can you play per turn?",
+    "expected_answer_contains": ["one", "1"],
+    "expected_documents": ["rulebook"],
+    "persona": "player",
+    "difficulty": "easy",
+    "category": "rulebook"
+  },
+  {
+    "id": "penalty_001",
+    "question": "What are the three severity levels for Pokémon TCG gameplay errors?",
+    "expected_answer_contains": ["minor", "major", "severe"],
+    "expected_documents": ["penalty_guidelines"],
+    "persona": "judge",
+    "difficulty": "easy",
+    "category": "penalties"
+  },
+  {
+    "id": "penalty_002",
+    "question": "What is the penalty for a minor Pokémon TCG gameplay error?",
+    "expected_answer_contains": ["warning"],
+    "expected_documents": ["penalty_guidelines"],
+    "persona": "judge",
+    "difficulty": "easy",
+    "category": "penalties"
+  },
+  {
+    "id": "penalty_003",
+    "question": "What factors should a judge consider when determining penalty severity?",
+    "expected_answer_contains": ["reversibility"],
+    "expected_documents": ["penalty_guidelines"],
+    "persona": "judge",
+    "difficulty": "medium",
+    "category": "penalties"
+  },
+  {
+    "id": "penalty_004",
+    "question": "What is the recommended penalty for a severe Pokémon TCG gameplay error?",
+    "expected_answer_contains": ["game loss"],
+    "expected_documents": ["penalty_guidelines"],
+    "persona": "judge",
+    "difficulty": "medium",
+    "category": "penalties"
+  },
+  {
+    "id": "penalty_005",
+    "question": "What is a DPC penalty in Pokémon TCG tournament play?",
+    "expected_answer_contains": ["double prize card", "prize"],
+    "expected_documents": ["penalty_guidelines"],
+    "persona": "judge",
+    "difficulty": "hard",
+    "category": "penalties"
+  },
+  {
+    "id": "legal_001",
+    "question": "What sets are currently legal in Standard format Pokémon TCG?",
+    "expected_answer_contains": ["scarlet", "violet"],
+    "expected_documents": ["legal_card_list"],
+    "persona": "judge",
+    "difficulty": "easy",
+    "category": "legality"
+  },
+  {
+    "id": "legal_002",
+    "question": "Are there any banned cards in the Standard format?",
+    "expected_answer_contains": ["banned"],
+    "expected_documents": ["legal_card_list"],
+    "persona": "judge",
+    "difficulty": "medium",
+    "category": "legality"
+  },
+  {
+    "id": "legal_003",
+    "question": "Can I use cards from the Sun and Moon era in Standard format?",
+    "expected_answer_contains": ["not", "standard"],
+    "expected_documents": ["legal_card_list"],
+    "persona": "player",
+    "difficulty": "easy",
+    "category": "legality"
+  },
+  {
+    "id": "card_001",
+    "question": "What does Charizard ex's Burning Darkness attack do?",
+    "expected_answer_contains": ["180", "prize", "30 more"],
+    "expected_documents": ["card_db_pokemon"],
+    "persona": "player",
+    "difficulty": "easy",
+    "category": "card_interactions"
+  },
+  {
+    "id": "card_002",
+    "question": "What is the ability of Pidgeot ex from Obsidian Flames?",
+    "expected_answer_contains": ["search", "deck"],
+    "expected_documents": ["card_db_pokemon"],
+    "persona": "player",
+    "difficulty": "medium",
+    "category": "card_interactions"
+  },
+  {
+    "id": "card_003",
+    "question": "Can Rare Candy be used on the first turn of the game?",
+    "expected_answer_contains": ["cannot", "can't", "first turn", "not"],
+    "expected_documents": ["rulings_compendium", "card_db_trainers"],
+    "persona": "judge",
+    "difficulty": "medium",
+    "category": "card_interactions"
+  },
+  {
+    "id": "card_004",
+    "question": "What is the ruling on Bench size limit?",
+    "expected_answer_contains": ["5", "five"],
+    "expected_documents": ["rulings_compendium", "rulebook"],
+    "persona": "judge",
+    "difficulty": "medium",
+    "category": "card_interactions"
+  },
+  {
+    "id": "card_005",
+    "question": "What does Iono Trainer card do?",
+    "expected_answer_contains": ["shuffle", "hand", "prize", "draw"],
+    "expected_documents": ["card_db_trainers"],
+    "persona": "player",
+    "difficulty": "easy",
+    "category": "card_interactions"
+  },
+  {
+    "id": "card_006",
+    "question": "How much HP does Gardevoir ex have?",
+    "expected_answer_contains": ["310"],
+    "expected_documents": ["card_db_pokemon"],
+    "persona": "player",
+    "difficulty": "easy",
+    "category": "card_interactions"
+  },
+  {
+    "id": "errata_001",
+    "question": "Has there been any errata issued for Ascension?",
+    "expected_answer_contains": ["errata", "feebas"],
+    "expected_documents": ["rulings_compendium"],
+    "persona": "judge",
+    "difficulty": "hard",
+    "category": "errata"
+  },
+  {
+    "id": "errata_002",
+    "question": "What is the errata for Balloon Berry?",
+    "expected_answer_contains": ["retreat", "errata"],
+    "expected_documents": ["rulings_compendium"],
+    "persona": "judge",
+    "difficulty": "hard",
+    "category": "errata"
+  },
+  {
+    "id": "errata_003",
+    "question": "Does Entei's Blaze Roar attack have errata?",
+    "expected_answer_contains": ["energy cards", "discard", "errata"],
+    "expected_documents": ["rulings_compendium"],
+    "persona": "judge",
+    "difficulty": "hard",
+    "category": "errata"
+  }
+]
