@@ -41,6 +41,50 @@ class OverlayManifest:
     card_errata: dict[str, list[ErrataOverlay]] = field(default_factory=dict)
 
 
+def extract_errata_from_compendium(compendium_path: Path) -> list[dict[str, str]]:
+    """Extract errata entries from compendium_rulings.json.
+
+    Reads the Errata category posts and converts them into the structured
+    format expected by build_overlay().
+
+    Args:
+        compendium_path: Path to compendium_rulings.json.
+
+    Returns:
+        List of dicts with card_name, new_text, old_text, source.
+    """
+    data = json.loads(compendium_path.read_text(encoding="utf-8"))
+    errata_posts = [
+        p for p in data.get("posts", [])
+        if p.get("category_name") == "Errata"
+    ]
+
+    entries: list[dict[str, str]] = []
+    for post in errata_posts:
+        title = post.get("title", "").strip()
+        content = post.get("content", "").strip()
+        if not title or not content:
+            continue
+
+        # Extract source from content (last "Source:" line)
+        source = "Compendium Errata"
+        source_match = re.search(
+            r"Source:\s*(.+?)(?:\n|$)", content, re.IGNORECASE
+        )
+        if source_match:
+            source = source_match.group(1).strip()
+
+        entries.append({
+            "card_name": title,
+            "new_text": content,
+            "old_text": "",
+            "source": source,
+        })
+
+    logger.info("Extracted %d errata entries from compendium", len(entries))
+    return entries
+
+
 def build_overlay(
     errata_paths: list[Path],
 ) -> OverlayManifest:

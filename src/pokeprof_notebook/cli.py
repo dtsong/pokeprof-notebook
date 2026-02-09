@@ -17,7 +17,13 @@ from rich.panel import Panel
 
 from pokeprof_notebook.config import get_project_root, load_config
 from pokeprof_notebook.indexer import file_hash, index_document, load_tree, save_tree, validate_tree
-from pokeprof_notebook.overlay import annotate_sections, load_overlay
+from pokeprof_notebook.overlay import (
+    annotate_sections,
+    build_overlay,
+    extract_errata_from_compendium,
+    load_overlay,
+    save_overlay,
+)
 from pokeprof_notebook.retriever import search, search_multi
 from pokeprof_notebook.router import route
 from pokeprof_notebook.synthesizer import synthesize
@@ -216,6 +222,26 @@ def ingest(document_name: str | None, force: bool) -> None:
             f"{idx.total_tokens} tokens → {index_path}"
         )
 
+    # Build errata overlay manifest from compendium data
+    compendium_source = _SOURCES_DIR / "compendium_rulings.json"
+    overlay_path = _INDEXES_DIR / "overlay_manifest.json"
+    if compendium_source.exists():
+        errata_entries = extract_errata_from_compendium(compendium_source)
+        if errata_entries:
+            # Write intermediate errata JSON, then build manifest
+            errata_json_path = _INDEXES_DIR / "_errata_entries.json"
+            errata_json_path.write_text(
+                json.dumps(errata_entries, indent=2, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+            manifest = build_overlay([errata_json_path])
+            save_overlay(manifest, overlay_path)
+            console.print(
+                f"  [green]Overlay:[/green] {len(manifest.card_errata)} errata entries "
+                f"→ {overlay_path}"
+            )
+            errata_json_path.unlink()  # Clean up intermediate file
+
 
 @main.command("fetch-cards")
 @click.option("--force", is_flag=True, help="Re-fetch even if cache is fresh.")
@@ -359,7 +385,7 @@ def query(
                 "\n".join(
                     f"[{s.node.metadata.section_number}] {s.node.metadata.title} "
                     f"(score={s.score:.2f})"
-                    + (" [errata]" if s.errata_context else "")
+                    + (" [yellow]errata[/yellow]" if s.errata_context else "")
                     for s in all_sections
                 ),
                 title="Retrieved Sections",
