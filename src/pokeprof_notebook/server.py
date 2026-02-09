@@ -19,6 +19,8 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from sse_starlette.sse import EventSourceResponse
 
+from fastapi.middleware.cors import CORSMiddleware
+
 from pokeprof_notebook.config import get_project_root, load_config
 from pokeprof_notebook.indexer import load_tree
 from pokeprof_notebook.overlay import annotate_sections, load_overlay
@@ -42,8 +44,14 @@ _ALLOWED_MODELS = {
 
 app = FastAPI(title="PokéProf Notebook", version="0.1.0")
 
-# Mount static files
-app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
+# CORS for dev mode (Vite on :5173 → FastAPI on :8000)
+if os.environ.get("POKEPROF_DEV"):
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:5173"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 
 @app.get("/api/health")
@@ -220,10 +228,96 @@ async def _error_stream(message: str):
     yield {"event": "error", "data": message}
 
 
-@app.get("/", response_class=HTMLResponse)
-async def index():
-    """Serve the minimal web viewer."""
-    index_path = _STATIC_DIR / "index.html"
-    if index_path.exists():
-        return HTMLResponse(index_path.read_text(encoding="utf-8"))
-    return HTMLResponse("<h1>PokéProf Notebook</h1><p>Static files not found.</p>")
+_NON_INDEX_FILES = {"overlay_manifest", "card_name_index"}
+
+
+@app.get("/api/indexes")
+async def list_indexes():
+    """List available document indexes with metadata."""
+    result = []
+    for path in sorted(_INDEXES_DIR.glob("*.json")):
+        if path.stem in _NON_INDEX_FILES:
+            continue
+        try:
+            idx = load_tree(path)
+            node_count = len(idx.root.walk())
+            result.append({
+                "name": idx.document_name,
+                "document_type": idx.document_type.value,
+                "node_count": node_count,
+                "total_tokens": idx.total_tokens,
+            })
+        except Exception:
+            logger.warning("Failed to load index %s", path.stem, exc_info=True)
+    return result
+
+
+@app.get("/api/indexes/{name}/tree")
+async def get_index_tree(name: str):
+    """Return tree structure without content for a given index."""
+    path = _INDEXES_DIR / f"{name}.json"
+    if not path.exists() or name in _NON_INDEX_FILES:
+        raise HTTPException(status_code=404, detail=f"Index '{name}' not found")
+
+    idx = load_tree(path)
+
+    def strip_content(node):
+        return {
+            "id": node.id,
+            "metadata": {
+                "document_type": node.metadata.document_type.value,
+                "section_number": node.metadata.section_number,
+                "title": node.metadata.title,
+            },
+            "token_count": node.token_count,
+            "children": [strip_content(c) for c in node.children],
+        }
+
+    return strip_content(idx.root)
+
+
+@app.get("/api/indexes/{name}/node/{node_id:path}")
+async def get_index_node(name: str, node_id: str):
+    """Return a single node with full content."""
+    path = _INDEXES_DIR / f"{name}.json"
+    if not path.exists() or name in _NON_INDEX_FILES:
+        raise HTTPException(status_code=404, detail=f"Index '{name}' not found")
+
+    idx = load_tree(path)
+    for node in idx.root.walk():
+        if node.id == node_id:
+            return {
+                "id": node.id,
+                "content": node.content,
+                "metadata": {
+                    "document_type": node.metadata.document_type.value,
+                    "section_number": node.metadata.section_number,
+                    "title": node.metadata.title,
+                },
+                "token_count": node.token_count,
+                "children": [
+                    {"id": c.id, "metadata": {"title": c.metadata.title}}
+                    for c in node.children
+                ],
+            }
+
+    raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found in '{name}'")
+
+
+# Serve frontend
+_SPA_DIR = _ROOT / "frontend" / "build"
+
+if _SPA_DIR.exists():
+    # SvelteKit SPA build — serves index.html as fallback for client-side routing
+    app.mount("/", StaticFiles(directory=str(_SPA_DIR), html=True), name="spa")
+else:
+    # Legacy static viewer fallback
+    app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
+
+    @app.get("/", response_class=HTMLResponse)
+    async def index():
+        """Serve the minimal web viewer."""
+        index_path = _STATIC_DIR / "index.html"
+        if index_path.exists():
+            return HTMLResponse(index_path.read_text(encoding="utf-8"))
+        return HTMLResponse("<h1>PokéProf Notebook</h1><p>Static files not found.</p>")

@@ -44,6 +44,11 @@ data/sources/*
 .DS_Store
 Thumbs.db
 
+# Frontend (SvelteKit)
+frontend/node_modules/
+frontend/.svelte-kit/
+frontend/build/
+
 # Testing / Coverage
 .pytest_cache/
 .coverage
