@@ -6,6 +6,18 @@ This project is designed to run as a single Cloud Run service that serves:
 
 For v1 we run in `us-central1`.
 
+## Terraform
+
+If you prefer to provision the infrastructure with Terraform (recommended), see:
+- `infra/README.md`
+
+Terraform provisions:
+- Artifact Registry
+- Secret Manager secrets (no values)
+- Cloud Run service (v2) with `invoker_iam_disabled=true`
+
+You still need to build and push the container image separately.
+
 ## Prereqs
 
 - A GCP project (`pokeprof-dev` or `pokeprof-prod`)

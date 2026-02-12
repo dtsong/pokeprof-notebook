@@ -54,3 +54,10 @@ frontend/build/
 .coverage
 htmlcov/
 .mypy_cache/
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
