@@ -22,6 +22,7 @@ variable "service_name" {
 variable "image" {
   description = "Container image URI to deploy."
   type        = string
+  default     = ""
   nullable    = false
 }
 

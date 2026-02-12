@@ -21,7 +21,13 @@ variable "service_name" {
 variable "image" {
   description = "Container image URI to deploy."
   type        = string
+  default     = ""
   nullable    = false
+
+  validation {
+    condition     = var.deploy_cloud_run ? length(var.image) > 0 : true
+    error_message = "When deploy_cloud_run=true, image must be a non-empty container image URI."
+  }
 }
 
 variable "artifact_repo_id" {
