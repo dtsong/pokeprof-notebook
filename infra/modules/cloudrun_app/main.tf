@@ -33,6 +33,23 @@ resource "google_project_service" "required" {
   disable_on_destroy         = false
 }
 
+# Firestore database (default)
+#
+# Required for invite-only allowlist lookups.
+resource "google_firestore_database" "default" {
+  project     = var.project_id
+  name        = "(default)"
+  location_id = var.firestore_location_id
+  type        = "FIRESTORE_NATIVE"
+
+  app_engine_integration_mode = "DISABLED"
+
+  delete_protection_state = "DELETE_PROTECTION_ENABLED"
+  deletion_policy         = "ABANDON"
+
+  depends_on = [google_project_service.required]
+}
+
 resource "google_artifact_registry_repository" "images" {
   location      = var.region
   repository_id = var.artifact_repo_id
@@ -147,6 +164,7 @@ resource "google_cloud_run_v2_service" "this" {
     google_project_iam_member.runtime_logging,
     google_project_iam_member.runtime_metrics,
     google_project_iam_member.runtime_firestore,
+    google_firestore_database.default,
     google_secret_manager_secret_iam_member.runtime_secret_access,
   ]
 }

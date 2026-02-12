@@ -66,6 +66,13 @@ variable "invoker_iam_disabled" {
   nullable    = false
 }
 
+variable "firestore_location_id" {
+  description = "Firestore database location id (e.g., nam5)."
+  type        = string
+  default     = "nam5"
+  nullable    = false
+}
+
 variable "enable_deletion_protection" {
   description = "Prevent accidental destroy of Cloud Run service."
   type        = bool

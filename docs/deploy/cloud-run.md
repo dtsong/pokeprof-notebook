@@ -40,6 +40,7 @@ You still need to build and push the container image separately.
 PROJECT_ID=pokeprof-dev
 REGION=us-central1
 SERVICE=pokeprof
+DOMAIN=judge-dev.trainerlab.io
 
 gcloud config set project "$PROJECT_ID"
 
@@ -52,7 +53,12 @@ gcloud auth configure-docker "$REGION-docker.pkg.dev"
 
 IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/pokeprof/$SERVICE:$(git rev-parse --short HEAD)"
 
-docker build -t "$IMAGE" .
+docker build \
+  --build-arg VITE_FIREBASE_API_KEY="..." \
+  --build-arg VITE_FIREBASE_AUTH_DOMAIN="$DOMAIN" \
+  --build-arg VITE_FIREBASE_PROJECT_ID="$PROJECT_ID" \
+  --build-arg VITE_FIREBASE_APP_ID="..." \
+  -t "$IMAGE" .
 docker push "$IMAGE"
 ```
 

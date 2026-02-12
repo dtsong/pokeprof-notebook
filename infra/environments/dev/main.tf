@@ -23,4 +23,6 @@ module "app" {
   max_instances              = var.max_instances
   invoker_iam_disabled       = var.invoker_iam_disabled
   enable_deletion_protection = var.enable_deletion_protection
+
+  firestore_location_id = var.firestore_location_id
 }

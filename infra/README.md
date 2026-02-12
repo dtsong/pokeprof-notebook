@@ -43,6 +43,18 @@ PY | tr -d '\n' | gcloud secrets versions add POKEPROF_SESSION_SECRET --data-fil
 Example image URI format:
 `us-central1-docker.pkg.dev/<project_id>/pokeprof/pokeprof:<tag>`
 
+When building the image, provide the Firebase web config as Docker build args
+(these are compile-time Vite env vars and are NOT secrets):
+
+```bash
+docker build \
+  --build-arg VITE_FIREBASE_API_KEY="..." \
+  --build-arg VITE_FIREBASE_AUTH_DOMAIN="judge-dev.trainerlab.io" \
+  --build-arg VITE_FIREBASE_PROJECT_ID="pokeprof-dev" \
+  --build-arg VITE_FIREBASE_APP_ID="..." \
+  -t us-central1-docker.pkg.dev/pokeprof-dev/pokeprof/pokeprof:TAG .
+```
+
 ## Notes
 
 - The Cloud Run service is publicly reachable at the network layer (invoker IAM

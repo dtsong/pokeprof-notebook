@@ -73,3 +73,10 @@ variable "enable_deletion_protection" {
   default     = false
   nullable    = false
 }
+
+variable "firestore_location_id" {
+  description = "Firestore database location id (e.g., nam5)."
+  type        = string
+  default     = "nam5"
+  nullable    = false
+}
