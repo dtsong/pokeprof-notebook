@@ -19,6 +19,7 @@
     "vite": "^6.0.0"
   },
   "dependencies": {
+    "firebase": "^11.4.0",
     "marked": "^15.0.0"
   }
 }

@@ -141,6 +141,25 @@ src/pokeprof_notebook/
 └── static/             # Web viewer (HTML/CSS/JS)
 ```
 
+### Auth (Cloud Run V1)
+
+The web app is invite-only.
+
+- Frontend uses Firebase Auth (Google + Email/Password) on `/invite`.
+- Backend enforces an allowlist stored in Firestore (`allowlist/{email}` with `enabled=true`).
+- SSE `/api/query` is authenticated via an HttpOnly session cookie created by `POST /api/session`.
+
+Local dev shortcuts:
+- Set `POKEPROF_DEV=1` and `POKEPROF_AUTH_DISABLED=1` to bypass auth for local testing.
+
+Config:
+- Backend env vars: see `.env.example`
+- Frontend env vars: see `frontend/.env.example`
+
 ## Roadmap
 
 See [Issue #1](https://github.com/dtsong/pokeprof-notebook/issues/1) for the full implementation plan.
+
+## Deployment
+
+- Cloud Run (us-central1): `docs/deploy/cloud-run.md`

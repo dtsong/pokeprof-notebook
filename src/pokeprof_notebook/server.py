@@ -14,10 +14,13 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from anthropic import APIConnectionError, APIStatusError, AuthenticationError
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import HTMLResponse
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sse_starlette.sse import EventSourceResponse
+
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.types import Scope
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -27,6 +30,16 @@ from pokeprof_notebook.overlay import annotate_sections, load_overlay
 from pokeprof_notebook.retriever import search, search_multi
 from pokeprof_notebook.router import route
 from pokeprof_notebook.synthesizer import synthesize_stream
+from pokeprof_notebook.auth import (
+    COOKIE_NAME,
+    SESSION_TTL_SECONDS,
+    SessionUser,
+    cookie_secure,
+    create_session_cookie,
+    require_allowlisted_user,
+    require_session,
+    verify_firebase_id_token,
+)
 
 load_dotenv()
 
@@ -65,8 +78,89 @@ async def health():
     }
 
 
+def _extract_bearer_token(authorization: str | None) -> str | None:
+    if not authorization:
+        return None
+    parts = authorization.split(" ", 1)
+    if len(parts) != 2:
+        return None
+    scheme, token = parts[0].strip().lower(), parts[1].strip()
+    if scheme != "bearer" or not token:
+        return None
+    return token
+
+
+@app.post("/api/session")
+async def create_session(
+    request: Request,
+    authorization: str | None = Header(None),
+):
+    """Create an HttpOnly session cookie from a Firebase ID token.
+
+    The client must send `Authorization: Bearer <firebase_id_token>`.
+    """
+    token = _extract_bearer_token(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing bearer token")
+
+    decoded = verify_firebase_id_token(token)
+    user = require_allowlisted_user(decoded)
+
+    cookie_val = create_session_cookie(user)
+    resp = JSONResponse(
+        {
+            "ok": True,
+            "user": {
+                "uid": user.uid,
+                "email": user.email,
+                "role": user.role,
+                "name": user.name,
+            },
+        }
+    )
+    resp.set_cookie(
+        COOKIE_NAME,
+        cookie_val,
+        max_age=SESSION_TTL_SECONDS,
+        httponly=True,
+        secure=cookie_secure(request),
+        samesite="lax",
+        path="/",
+    )
+    return resp
+
+
+@app.get("/api/me")
+async def me(request: Request):
+    """Return current session info (or authenticated=false)."""
+    cookie_val = request.cookies.get(COOKIE_NAME)
+    if not cookie_val:
+        return {"authenticated": False, "user": None}
+    try:
+        user = require_session(request)
+    except HTTPException:
+        return {"authenticated": False, "user": None}
+    return {
+        "authenticated": True,
+        "user": {
+            "uid": user.uid,
+            "email": user.email,
+            "role": user.role,
+            "name": user.name,
+        },
+    }
+
+
+@app.post("/api/logout")
+async def logout(request: Request):
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie(COOKIE_NAME, path="/")
+    return resp
+
+
 @app.get("/api/query")
 async def query_endpoint(
+    user: SessionUser = Depends(require_session),
     q: str = Query(..., max_length=500, description="The question to ask"),
     persona: str = Query("judge", description="Persona: judge, professor, player"),
     model: str = Query("claude-haiku-4-5-20251001", description="LLM model"),
@@ -101,11 +195,13 @@ async def query_endpoint(
             route_decision = await asyncio.to_thread(route, q, config, persona)
             yield {
                 "event": "route",
-                "data": json.dumps({
-                    "documents": route_decision.documents,
-                    "confidence": route_decision.confidence,
-                    "reasoning": route_decision.reasoning,
-                }),
+                "data": json.dumps(
+                    {
+                        "documents": route_decision.documents,
+                        "confidence": route_decision.confidence,
+                        "reasoning": route_decision.reasoning,
+                    }
+                ),
             }
 
             # Load indexes
@@ -129,12 +225,22 @@ async def query_endpoint(
             if len(indexes) > 1:
                 all_sections = await asyncio.to_thread(
                     search_multi,
-                    q, indexes, 10, model, True, None, card_names,
+                    q,
+                    indexes,
+                    10,
+                    model,
+                    True,
+                    None,
+                    card_names,
                 )
             else:
                 doc_name, index = next(iter(indexes.items()))
                 all_sections = await asyncio.to_thread(
-                    search, q, index, 5, model,
+                    search,
+                    q,
+                    index,
+                    5,
+                    model,
                 )
 
             if not all_sections:
@@ -153,15 +259,17 @@ async def query_endpoint(
             # Send section metadata
             yield {
                 "event": "sections",
-                "data": json.dumps([
-                    {
-                        "section_number": s.node.metadata.section_number,
-                        "title": s.node.metadata.title,
-                        "score": round(s.score, 3),
-                        "document_name": s.document_name,
-                    }
-                    for s in all_sections
-                ]),
+                "data": json.dumps(
+                    [
+                        {
+                            "section_number": s.node.metadata.section_number,
+                            "title": s.node.metadata.title,
+                            "score": round(s.score, 3),
+                            "document_name": s.document_name,
+                        }
+                        for s in all_sections
+                    ]
+                ),
             }
 
             # Stream answer via thread to avoid blocking the event loop
@@ -176,7 +284,10 @@ async def query_endpoint(
             yield {"event": "error", "data": "Authentication failed. Check API key."}
         except (APIConnectionError, APIStatusError) as e:
             logger.error("API error during query: %s", e)
-            yield {"event": "error", "data": "The AI service is temporarily unavailable. Please try again."}
+            yield {
+                "event": "error",
+                "data": "The AI service is temporarily unavailable. Please try again.",
+            }
         except Exception:
             logger.error("Query pipeline error", exc_info=True)
             yield {"event": "error", "data": "An internal error occurred."}
@@ -232,7 +343,7 @@ _NON_INDEX_FILES = {"overlay_manifest", "card_name_index"}
 
 
 @app.get("/api/indexes")
-async def list_indexes():
+async def list_indexes(user: SessionUser = Depends(require_session)):
     """List available document indexes with metadata."""
     result = []
     for path in sorted(_INDEXES_DIR.glob("*.json")):
@@ -241,19 +352,21 @@ async def list_indexes():
         try:
             idx = load_tree(path)
             node_count = len(idx.root.walk())
-            result.append({
-                "name": idx.document_name,
-                "document_type": idx.document_type.value,
-                "node_count": node_count,
-                "total_tokens": idx.total_tokens,
-            })
+            result.append(
+                {
+                    "name": idx.document_name,
+                    "document_type": idx.document_type.value,
+                    "node_count": node_count,
+                    "total_tokens": idx.total_tokens,
+                }
+            )
         except Exception:
             logger.warning("Failed to load index %s", path.stem, exc_info=True)
     return result
 
 
 @app.get("/api/indexes/{name}/tree")
-async def get_index_tree(name: str):
+async def get_index_tree(name: str, user: SessionUser = Depends(require_session)):
     """Return tree structure without content for a given index."""
     path = _INDEXES_DIR / f"{name}.json"
     if not path.exists() or name in _NON_INDEX_FILES:
@@ -277,7 +390,11 @@ async def get_index_tree(name: str):
 
 
 @app.get("/api/indexes/{name}/node/{node_id:path}")
-async def get_index_node(name: str, node_id: str):
+async def get_index_node(
+    name: str,
+    node_id: str,
+    user: SessionUser = Depends(require_session),
+):
     """Return a single node with full content."""
     path = _INDEXES_DIR / f"{name}.json"
     if not path.exists() or name in _NON_INDEX_FILES:
@@ -301,15 +418,51 @@ async def get_index_node(name: str, node_id: str):
                 ],
             }
 
-    raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found in '{name}'")
+    raise HTTPException(
+        status_code=404, detail=f"Node '{node_id}' not found in '{name}'"
+    )
 
 
 # Serve frontend
 _SPA_DIR = _ROOT / "frontend" / "build"
 
+
+class SPAStaticFiles(StaticFiles):
+    """StaticFiles with SPA HTML fallback.
+
+    Starlette's StaticFiles(html=True) serves index.html for directory paths,
+    but does not provide a catch-all fallback for client-side routes.
+
+    This implementation serves index.html for 404s on paths that look like
+    application routes (no file extension) and that accept HTML.
+    """
+
+    async def get_response(self, path: str, scope: Scope):  # type: ignore[override]
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            if exc.status_code != 404:
+                raise
+
+            # If the request is for a real file (has an extension), keep the 404.
+            if Path(path).suffix:
+                raise
+
+            # Only fallback for HTML navigations.
+            accept = ""
+            for k, v in scope.get("headers") or []:
+                if k.lower() == b"accept":
+                    accept = v.decode("latin-1")
+                    break
+            if "text/html" not in accept and "*/*" not in accept:
+                raise
+
+            return await super().get_response("index.html", scope)
+
+
 if _SPA_DIR.exists():
-    # SvelteKit SPA build — serves index.html as fallback for client-side routing
-    app.mount("/", StaticFiles(directory=str(_SPA_DIR), html=True), name="spa")
+    # SvelteKit static build with SPA routing fallback.
+    app.mount("/", SPAStaticFiles(directory=str(_SPA_DIR), html=True), name="spa")
 else:
     # Legacy static viewer fallback
     app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")

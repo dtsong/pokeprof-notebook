@@ -19,31 +19,35 @@ def indexes_dir(tmp_path):
     from pokeprof_notebook.types import DocumentType
 
     # Create a proper index with hierarchy
-    root = make_node(id="root", title="Test Rulebook", children=[
-        make_node(
-            id="1",
-            content="Section 1 content about basic rules.",
-            section_number="1",
-            title="Basic Rules",
-            token_count=8,
-            children=[
-                make_node(
-                    id="1.1",
-                    content="Subsection about energy cards.",
-                    section_number="1.1",
-                    title="Energy",
-                    token_count=5,
-                ),
-            ],
-        ),
-        make_node(
-            id="2",
-            content="Section 2 content about battles.",
-            section_number="2",
-            title="Battles",
-            token_count=6,
-        ),
-    ])
+    root = make_node(
+        id="root",
+        title="Test Rulebook",
+        children=[
+            make_node(
+                id="1",
+                content="Section 1 content about basic rules.",
+                section_number="1",
+                title="Basic Rules",
+                token_count=8,
+                children=[
+                    make_node(
+                        id="1.1",
+                        content="Subsection about energy cards.",
+                        section_number="1.1",
+                        title="Energy",
+                        token_count=5,
+                    ),
+                ],
+            ),
+            make_node(
+                id="2",
+                content="Section 2 content about battles.",
+                section_number="2",
+                title="Battles",
+                token_count=6,
+            ),
+        ],
+    )
 
     idx = make_index(
         document_name="rulebook",
@@ -53,15 +57,19 @@ def indexes_dir(tmp_path):
     save_tree(idx, tmp_path / "rulebook.json")
 
     # Create a second index
-    small_root = make_node(id="root", title="Penalties", children=[
-        make_node(
-            id="pg1",
-            content="Minor infraction rules.",
-            section_number="1",
-            title="Minor Infractions",
-            token_count=4,
-        ),
-    ])
+    small_root = make_node(
+        id="root",
+        title="Penalties",
+        children=[
+            make_node(
+                id="pg1",
+                content="Minor infraction rules.",
+                section_number="1",
+                title="Minor Infractions",
+                token_count=4,
+            ),
+        ],
+    )
     pg_idx = make_index(
         document_name="penalty_guidelines",
         document_type=DocumentType.PENALTY_GUIDELINES,
@@ -78,11 +86,16 @@ def indexes_dir(tmp_path):
 
 
 @pytest.fixture
-def client(indexes_dir):
+def client(indexes_dir, monkeypatch):
     """FastAPI test client with mocked indexes directory."""
-    with patch("pokeprof_notebook.server._INDEXES_DIR", indexes_dir), \
-         patch("pokeprof_notebook.server._SPA_DIR", Path("/nonexistent")):
+    monkeypatch.setenv("POKEPROF_DEV", "1")
+    monkeypatch.setenv("POKEPROF_AUTH_DISABLED", "1")
+    with (
+        patch("pokeprof_notebook.server._INDEXES_DIR", indexes_dir),
+        patch("pokeprof_notebook.server._SPA_DIR", Path("/nonexistent")),
+    ):
         from pokeprof_notebook.server import app
+
         yield TestClient(app)
 
 
