@@ -104,6 +104,8 @@ resource "google_secret_manager_secret_iam_member" "runtime_secret_access" {
 resource "google_cloud_run_v2_service" "this" {
   provider = google-beta
 
+  count = var.deploy_cloud_run ? 1 : 0
+
   name     = var.service_name
   location = var.region
 

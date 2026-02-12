@@ -25,4 +25,6 @@ module "app" {
   enable_deletion_protection = var.enable_deletion_protection
 
   firestore_location_id = var.firestore_location_id
+
+  deploy_cloud_run = var.deploy_cloud_run
 }

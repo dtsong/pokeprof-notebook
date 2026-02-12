@@ -80,3 +80,10 @@ variable "firestore_location_id" {
   default     = "nam5"
   nullable    = false
 }
+
+variable "deploy_cloud_run" {
+  description = "Whether to deploy the Cloud Run service (set false for first apply to create APIs/secrets before adding secret versions)."
+  type        = bool
+  default     = true
+  nullable    = false
+}

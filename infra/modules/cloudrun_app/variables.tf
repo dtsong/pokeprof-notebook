@@ -79,3 +79,10 @@ variable "enable_deletion_protection" {
   default     = false
   nullable    = false
 }
+
+variable "deploy_cloud_run" {
+  description = "Whether to deploy the Cloud Run service. Useful for a first apply that only creates APIs/secrets before adding secret versions and the image."
+  type        = bool
+  default     = true
+  nullable    = false
+}
